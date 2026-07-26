@@ -207,6 +207,30 @@ body {
   flex-shrink: 0;
 }
 
+.detalle-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-eliminar-persona {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-eliminar-persona:hover {
+  border-color: #b5504a;
+  color: #b5504a;
+}
+
 .detalle-nombre {
   font-weight: 600;
   font-size: 17px;
@@ -532,10 +556,13 @@ window.addEventListener('error', function (e) {
     <button class="btn-volver" id="btnVolver" aria-label="Volver">
       <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 4l-6 6 6 6"/></svg>
     </button>
-    <div>
+    <div class="detalle-info">
       <div class="detalle-nombre" id="detallePersonaNombre">Nombre</div>
       <div class="detalle-total" id="detallePersonaTotal">Debe S/ 0.00</div>
     </div>
+    <button class="btn-eliminar-persona" id="btnEliminarPersona" title="Eliminar persona" aria-label="Eliminar persona">
+      <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
+    </button>
   </div>
 
   <div id="listaCategorias"></div>
@@ -697,6 +724,7 @@ const btnVolver = document.getElementById("btnVolver");
 
 const detallePersonaNombre = document.getElementById("detallePersonaNombre");
 const detallePersonaTotal = document.getElementById("detallePersonaTotal");
+const btnEliminarPersona = document.getElementById("btnEliminarPersona");
 const listaCategorias = document.getElementById("listaCategorias");
 
 const carritoBar = document.getElementById("carritoBar");
@@ -879,6 +907,26 @@ function abrirPantallaPersona(persona) {
 }
 
 btnVolver.addEventListener("click", () => {
+  pantallaPersona.hidden = true;
+  pantallaInicio.hidden = false;
+  btnAgregarPersona.hidden = false;
+  btnAgregarProducto.hidden = true;
+  renderListaPersonas(personas);
+});
+
+btnEliminarPersona.addEventListener("click", async () => {
+  if (!personaActual || !supabaseListo()) return;
+
+  const confirmado = confirm(
+    `¿Eliminar a "${personaActual.nombre}"?\n\nEsto borrará TAMBIÉN todo su historial de fiados para siempre. Esta acción no se puede deshacer.`
+  );
+  if (!confirmado) return;
+
+  const { error } = await sb.from("personas").delete().eq("id", personaActual.id);
+  if (error) return mostrarError("No se pudo eliminar la persona.", error);
+
+  personas = personas.filter((p) => p.id !== personaActual.id);
+
   pantallaPersona.hidden = true;
   pantallaInicio.hidden = false;
   btnAgregarPersona.hidden = false;
