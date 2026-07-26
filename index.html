@@ -601,7 +601,24 @@ body {
 const SUPABASE_URL = "https://stjrahfzktosterzkoxv.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HQmsRjO82v9X3Ync8dHkjg_r35lcPYs";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase = null;
+try {
+  if (window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } else {
+    console.error("No se cargó la librería de Supabase (revisa tu conexión a internet o si algo bloquea cdn.jsdelivr.net).");
+  }
+} catch (err) {
+  console.error("Error al iniciar Supabase:", err);
+}
+
+function supabaseListo() {
+  if (!supabase) {
+    mostrarError("No hay conexión con Supabase todavía. Revisa tu internet y recarga la página.");
+    return false;
+  }
+  return true;
+}
 
 // =========================================================
 // Estado de la app (se llena al cargar desde Supabase)
@@ -688,6 +705,12 @@ function mostrarError(mensaje, error) {
 // Carga inicial de datos desde Supabase
 // =========================================================
 async function cargarDatosIniciales() {
+  if (!supabaseListo()) {
+    estadoVacioEl.hidden = false;
+    estadoVacioEl.textContent = "No hay conexión con Supabase. Revisa tu internet y recarga.";
+    return;
+  }
+
   estadoVacioEl.hidden = false;
   estadoVacioEl.textContent = "Cargando...";
 
@@ -778,7 +801,7 @@ btnAgregarPersona.addEventListener("click", () => {
 
 document.getElementById("btnGuardarPersona").addEventListener("click", async (e) => {
   const nombre = document.getElementById("inputNombrePersona").value.trim();
-  if (!nombre) return;
+  if (!nombre || !supabaseListo()) return;
 
   e.target.disabled = true;
   const { data, error } = await supabase.from("personas").insert({ nombre }).select().single();
@@ -918,7 +941,7 @@ function actualizarCarritoBar() {
 }
 
 btnGuardarFiado.addEventListener("click", async () => {
-  if (!personaActual || carritoActual.length === 0) return;
+  if (!personaActual || carritoActual.length === 0 || !supabaseListo()) return;
 
   btnGuardarFiado.disabled = true;
   btnGuardarFiado.textContent = "Guardando...";
@@ -1019,7 +1042,7 @@ document.getElementById("btnGuardarProducto").addEventListener("click", async (e
   const tieneFrio = document.getElementById("checkTieneFrio").checked;
   const precioFrio = tieneFrio ? parseFloat(document.getElementById("inputPrecioFrio").value) : null;
 
-  if (!nombre || isNaN(precioBase)) return;
+  if (!nombre || isNaN(precioBase) || !supabaseListo()) return;
 
   const categoriaObj = categoriasCompletas.find((c) => c.nombre === categoriaNombre);
 
