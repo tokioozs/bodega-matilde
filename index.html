@@ -234,6 +234,7 @@ body {
 }
 
 .producto-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -245,6 +246,30 @@ body {
 
 .producto-card:hover {
   border-color: var(--accent);
+}
+
+.btn-eliminar-producto {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.btn-eliminar-producto:hover {
+  border-color: #b5504a;
+  color: #b5504a;
 }
 
 .producto-imagen-wrap {
@@ -280,8 +305,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   overflow: hidden;
+}
+
+.botones-foto {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.botones-foto .btn-secundario {
+  font-size: 13px;
+  padding: 8px 6px;
 }
 
 .selector-imagen img {
@@ -458,6 +493,11 @@ body {
 }
 
 </style>
+<script>
+window.addEventListener('error', function (e) {
+  alert('Error en la app:\n' + e.message + '\n(línea ' + e.lineno + ')');
+});
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
@@ -532,9 +572,14 @@ body {
       <span>Imagen (opcional)</span>
       <div class="selector-imagen" id="selectorImagen">
         <img id="previewImagen" hidden>
-        <span id="placeholderImagen">Toca para elegir una foto</span>
+        <span id="placeholderImagen">Sin foto todavía</span>
       </div>
-      <input type="file" id="inputImagenProducto" accept="image/*" hidden>
+      <div class="botones-foto">
+        <button type="button" class="btn-secundario" id="btnTomarFoto">📷 Tomar foto</button>
+        <button type="button" class="btn-secundario" id="btnElegirGaleria">🖼️ Elegir de galería</button>
+      </div>
+      <input type="file" id="inputCamara" accept="image/*" capture="environment" hidden>
+      <input type="file" id="inputGaleria" accept="image/*" hidden>
     </label>
     <label class="campo">
       <span>Nombre</span>
@@ -601,10 +646,10 @@ body {
 const SUPABASE_URL = "https://stjrahfzktosterzkoxv.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HQmsRjO82v9X3Ync8dHkjg_r35lcPYs";
 
-let supabase = null;
+let sb = null;
 try {
   if (window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   } else {
     console.error("No se cargó la librería de Supabase (revisa tu conexión a internet o si algo bloquea cdn.jsdelivr.net).");
   }
@@ -613,7 +658,7 @@ try {
 }
 
 function supabaseListo() {
-  if (!supabase) {
+  if (!sb) {
     mostrarError("No hay conexión con Supabase todavía. Revisa tu internet y recarga la página.");
     return false;
   }
@@ -715,9 +760,9 @@ async function cargarDatosIniciales() {
   estadoVacioEl.textContent = "Cargando...";
 
   const [resCategorias, resProductos, resPersonas] = await Promise.all([
-    supabase.from("categorias").select("*").order("id"),
-    supabase.from("productos").select("*").order("nombre"),
-    supabase.from("personas_con_deuda").select("*").order("nombre"),
+    sb.from("categorias").select("*").order("id"),
+    sb.from("productos").select("*").order("nombre"),
+    sb.from("personas_con_deuda").select("*").order("nombre"),
   ]);
 
   if (resCategorias.error || resProductos.error || resPersonas.error) {
@@ -804,7 +849,7 @@ document.getElementById("btnGuardarPersona").addEventListener("click", async (e)
   if (!nombre || !supabaseListo()) return;
 
   e.target.disabled = true;
-  const { data, error } = await supabase.from("personas").insert({ nombre }).select().single();
+  const { data, error } = await sb.from("personas").insert({ nombre }).select().single();
   e.target.disabled = false;
 
   if (error) return mostrarError("No se pudo guardar la persona.", error);
@@ -863,16 +908,40 @@ function renderProductosPorCategoria() {
         ? `<img src="${producto.imagen}" alt="">`
         : iconoCajita();
       card.innerHTML = `
+        <div class="btn-eliminar-producto" title="Eliminar producto">✕</div>
         <div class="producto-imagen-wrap">${contenidoImagen}</div>
         <div class="producto-nombre">${producto.nombre}</div>
         <div class="producto-precio">${soles(producto.precioBase)}</div>
       `;
       card.addEventListener("click", () => abrirModalCantidad(producto));
+      card.querySelector(".btn-eliminar-producto").addEventListener("click", (e) => {
+        e.stopPropagation();
+        eliminarProducto(producto);
+      });
       grid.appendChild(card);
     });
 
     listaCategorias.appendChild(grid);
   });
+}
+
+async function eliminarProducto(producto) {
+  const confirmado = confirm(`¿Eliminar "${producto.nombre}"? Esta acción no se puede deshacer.`);
+  if (!confirmado || !supabaseListo()) return;
+
+  const { error } = await sb.from("productos").delete().eq("id", producto.id);
+
+  if (error) {
+    if (error.code === "23503") {
+      mostrarError('No se puede eliminar: este producto ya aparece en un fiado guardado.');
+    } else {
+      mostrarError("No se pudo eliminar el producto.", error);
+    }
+    return;
+  }
+
+  productos = productos.filter((p) => p.id !== producto.id);
+  renderProductosPorCategoria();
 }
 
 // =========================================================
@@ -947,7 +1016,7 @@ btnGuardarFiado.addEventListener("click", async () => {
   btnGuardarFiado.textContent = "Guardando...";
 
   // 1. Crear la cabecera del fiado
-  const { data: fiado, error: errorFiado } = await supabase
+  const { data: fiado, error: errorFiado } = await sb
     .from("fiados")
     .insert({ persona_id: personaActual.id })
     .select()
@@ -967,7 +1036,7 @@ btnGuardarFiado.addEventListener("click", async () => {
     precio_usado: item.precioUsado,
   }));
 
-  const { error: errorDetalle } = await supabase.from("detalle_fiado").insert(detalles);
+  const { error: errorDetalle } = await sb.from("detalle_fiado").insert(detalles);
 
   btnGuardarFiado.disabled = false;
   btnGuardarFiado.textContent = "Guardar fiado";
@@ -992,14 +1061,17 @@ function llenarSelectCategorias() {
   select.innerHTML = categorias.map((c) => `<option value="${c}">${c}</option>`).join("");
 }
 
-const selectorImagen = document.getElementById("selectorImagen");
-const inputImagenProducto = document.getElementById("inputImagenProducto");
 const previewImagen = document.getElementById("previewImagen");
 const placeholderImagen = document.getElementById("placeholderImagen");
+const btnTomarFoto = document.getElementById("btnTomarFoto");
+const btnElegirGaleria = document.getElementById("btnElegirGaleria");
+const inputCamara = document.getElementById("inputCamara");
+const inputGaleria = document.getElementById("inputGaleria");
 
-selectorImagen.addEventListener("click", () => inputImagenProducto.click());
+btnTomarFoto.addEventListener("click", () => inputCamara.click());
+btnElegirGaleria.addEventListener("click", () => inputGaleria.click());
 
-inputImagenProducto.addEventListener("change", (e) => {
+function manejarImagenElegida(e) {
   const archivo = e.target.files[0];
   if (!archivo) return;
 
@@ -1013,7 +1085,10 @@ inputImagenProducto.addEventListener("change", (e) => {
     placeholderImagen.hidden = true;
   };
   lector.readAsDataURL(archivo);
-});
+}
+
+inputCamara.addEventListener("change", manejarImagenElegida);
+inputGaleria.addEventListener("change", manejarImagenElegida);
 
 btnAgregarProducto.addEventListener("click", () => {
   document.getElementById("inputNombreProducto").value = "";
@@ -1026,7 +1101,8 @@ btnAgregarProducto.addEventListener("click", () => {
   previewImagen.hidden = true;
   previewImagen.src = "";
   placeholderImagen.hidden = false;
-  inputImagenProducto.value = "";
+  inputCamara.value = "";
+  inputGaleria.value = "";
   llenarSelectCategorias();
   abrirModal("modalProducto");
 });
@@ -1053,20 +1129,20 @@ document.getElementById("btnGuardarProducto").addEventListener("click", async (e
   let imagenUrl = null;
   if (archivoImagenSeleccionado) {
     const nombreArchivo = `${Date.now()}_${archivoImagenSeleccionado.name}`;
-    const { error: errorSubida } = await supabase.storage
+    const { error: errorSubida } = await sb.storage
       .from("productos-imagenes")
       .upload(nombreArchivo, archivoImagenSeleccionado);
 
     if (errorSubida) {
       mostrarError("No se pudo subir la imagen, se guardará el producto sin foto.", errorSubida);
     } else {
-      const { data } = supabase.storage.from("productos-imagenes").getPublicUrl(nombreArchivo);
+      const { data } = sb.storage.from("productos-imagenes").getPublicUrl(nombreArchivo);
       imagenUrl = data.publicUrl;
     }
   }
 
   // 2. Guardar el producto
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("productos")
     .insert({
       nombre,
